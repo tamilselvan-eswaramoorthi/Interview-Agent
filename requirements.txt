@@ -1,0 +1,4 @@
+sounddevice
+scipy
+assemblyai
+google-generativeai
