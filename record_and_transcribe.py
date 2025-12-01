@@ -10,7 +10,7 @@ from ai_handler import GeminiHandler
 from utils import list_audio_devices, verify_device
 
 
-DEVICE_ID = 6
+DEVICE_ID = 11
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
@@ -66,10 +66,8 @@ class TranscriptionApp:
                 pass
             finally:
                 self.audio_handler.client = None
-        
-        if hasattr(self, 'recording_thread') and self.recording_thread.is_alive():
+        if self.recording_thread is not None and self.recording_thread.is_alive():
             self.recording_thread.join(timeout=1.0)
-            
         self.is_recording = True
         self.ui.start_button.config(state='disabled')
         self.ui.stop_button.config(state='normal')

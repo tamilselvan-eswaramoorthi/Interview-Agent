@@ -8,7 +8,7 @@ duration = 10  # Duration of recording in seconds
 filename = "recorded_audio.wav"
 print("Available audio devices:")
 print(sd.query_devices())
-DEVICE_ID = 6
+DEVICE_ID = 11
 print(f"Recording for {duration} seconds...")
 recording = sd.rec(int(duration * samplerate), samplerate=samplerate, device=DEVICE_ID, channels=1)
 sd.wait()
