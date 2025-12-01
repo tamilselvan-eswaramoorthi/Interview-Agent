@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Interview Assistant</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        /* Mode Toggle */
+        .mode-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 0;
+            margin-bottom: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 4px;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .mode-btn {
+            padding: 12px 40px;
+            font-size: 16px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            border-radius: 8px;
+            color: #666;
+        }
+
+        .mode-btn.active {
+            background: #667eea;
+            color: white;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .mode-btn:hover:not(.active) {
+            color: #667eea;
+        }
+
+        /* Mode Containers */
+        .mode-container {
+            display: none;
+        }
+
+        .mode-container.active {
+            display: block;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #startBtn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        #startBtn:hover {
+            background: #45a049;
+        }
+
+        #startBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #stopBtn {
+            background: #f44336;
+            color: white;
+        }
+
+        #stopBtn:hover {
+            background: #da190b;
+        }
+
+        #stopBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #freezeBtn {
+            background: #ff9800;
+            color: white;
+        }
+
+        #freezeBtn:hover {
+            background: #e68900;
+        }
+
+        #freezeBtn.frozen {
+            background: #2196F3;
+        }
+
+        #freezeBtn.frozen:hover {
+            background: #0b7dda;
+        }
+
+        #clearBtn {
+            background: #9E9E9E;
+            color: white;
+        }
+
+        #clearBtn:hover {
+            background: #757575;
+        }
+
+        .status {
+            text-align: center;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 24px;
+            background: #667eea;
+            border-radius: 2px;
+        }
+
+        .text-area {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            overflow-y: auto;
+            background: #fafafa;
+            transition: border-color 0.3s ease;
+        }
+
+        .text-area:focus-within {
+            border-color: #667eea;
+            outline: none;
+        }
+
+        #transcriptionArea {
+            min-height: 120px;
+            max-height: 200px;
+        }
+
+        #responseArea {
+            min-height: 400px;
+            max-height: 600px;
+            white-space: pre-wrap;
+        }
+
+        /* Image Mode Layout */
+        .image-layout {
+            display: flex;
+            gap: 20px;
+            height: 600px;
+        }
+
+        .image-list-panel {
+            width: 20%;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fafafa;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .image-list-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .image-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .image-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .image-item.active {
+            border-color: #667eea;
+            background: #e3f2fd;
+        }
+
+        .image-item-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+            word-break: break-word;
+        }
+
+        .image-item-time {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .image-result-panel {
+            width: 80%;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fafafa;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .no-image-selected {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+            font-size: 1.2em;
+        }
+
+        .image-result-header {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .image-result-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 5px;
+        }
+
+        .image-result-subtitle {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .image-result-content {
+            font-size: 14px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            color: #333;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .recording-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #f44336;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #4CAF50;
+            color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+        }
+
+        .connection-status.disconnected {
+            background: #f44336;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .image-layout {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .image-list-panel,
+            .image-result-panel {
+                width: 100%;
+                min-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">Connecting...</div>
+    
+    <div class="container">
+        <header>
+            <h1>🎤 AI Interview Assistant</h1>
+        </header>
+
+        <!-- Mode Toggle -->
+        <div class="mode-toggle">
+            <button class="mode-btn active" onclick="switchMode('audio')" id="audioModeBtn">🎤 Audio Mode</button>
+            <button class="mode-btn" onclick="switchMode('image')" id="imageModeBtn">📸 Image Mode</button>
+        </div>
+
+        <div class="status" id="statusArea">Ready to start...</div>
+
+        <!-- Audio Mode Container -->
+        <div id="audioMode" class="mode-container active">
+            <div class="controls">
+                <button id="startBtn" onclick="startRecording()">▶ Start Recording</button>
+                <button id="stopBtn" onclick="stopRecording()" disabled>⏹ Stop Recording</button>
+                <button id="freezeBtn" onclick="toggleFreeze()">❄ Freeze AI</button>
+                <button id="clearBtn" onclick="clearAll()">🗑 Clear</button>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Live Transcription</div>
+                <div class="text-area" id="transcriptionArea"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">AI Response</div>
+                <div class="text-area" id="responseArea"></div>
+            </div>
+        </div>
+
+        <!-- Image Mode Container -->
+        <div id="imageMode" class="mode-container">
+            <div class="image-layout">
+                <!-- Left Panel: Image List (20%) -->
+                <div class="image-list-panel">
+                    <div class="image-list-title">📁 Uploaded Images</div>
+                    <div id="imageList">
+                        <div style="color: #999; text-align: center; padding: 20px;">
+                            No images yet...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Image Results (80%) -->
+                <div class="image-result-panel" id="imageResultPanel">
+                    <div class="no-image-selected">
+                        Select an image to view analysis
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let isRecording = false;
+        let isFrozen = false;
+        let currentMode = 'audio';
+        let imageResults = {};  // Store results by image name
+        let selectedImage = null;
+
+        // Connection status
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            updateConnectionStatus(true);
+            socket.emit('get_image_list');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            updateConnectionStatus(false);
+        });
+
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.textContent = '● Connected';
+                statusEl.classList.remove('disconnected');
+            } else {
+                statusEl.textContent = '● Disconnected';
+                statusEl.classList.add('disconnected');
+            }
+        }
+
+        // Mode switching
+        function switchMode(mode) {
+            currentMode = mode;
+            document.getElementById('audioModeBtn').classList.toggle('active', mode === 'audio');
+            document.getElementById('imageModeBtn').classList.toggle('active', mode === 'image');
+            document.getElementById('audioMode').classList.toggle('active', mode === 'audio');
+            document.getElementById('imageMode').classList.toggle('active', mode === 'image');
+            
+            if (mode === 'audio') {
+                document.getElementById('statusArea').textContent = 'Audio Mode: Ready to start recording...';
+            } else {
+                document.getElementById('statusArea').textContent = 'Image Mode: Monitoring for new images...';
+                socket.emit('get_image_list');
+            }
+        }
+
+        socket.on('status_update', (data) => {
+            const statusArea = document.getElementById('statusArea');
+            statusArea.textContent = data.message;
+            statusArea.style.color = data.color || 'black';
+            if (data.message.includes('Recording...')) {
+                statusArea.innerHTML = '<span class="recording-indicator"></span>' + data.message;
+            }
+        });
+
+        socket.on('transcription', (data) => {
+            const transcriptionArea = document.getElementById('transcriptionArea');
+            transcriptionArea.textContent += data.text + '\n';
+            transcriptionArea.scrollTop = transcriptionArea.scrollHeight;
+        });
+
+        socket.on('ai_response', (data) => {
+            const responseArea = document.getElementById('responseArea');
+            responseArea.textContent += '\n' + data.text + '\n' + '\n' + '─'.repeat(60) + '\n';
+            responseArea.scrollTop = responseArea.scrollHeight;
+        });
+
+        socket.on('clear_transcription', () => {
+            document.getElementById('transcriptionArea').textContent = '';
+        });
+
+        socket.on('new_image_item', (data) => {
+            addImageToList(data.name, data.timestamp);
+            // Auto-select the latest image (which is the one just added)
+            selectImage(data.name);
+        });
+
+        socket.on('image_response', (data) => {
+            imageResults[data.image_name] = {
+                text: data.text,
+                image_name: data.image_name,
+                image_path: data.image_path
+            };
+            
+            // Always display the latest image response automatically
+            displayImageResult(data.image_name);
+            selectedImage = data.image_name;
+            updateImageListSelection();
+        });
+
+        socket.on('image_list', (data) => {
+            const imageListEl = document.getElementById('imageList');
+            if (data.images && data.images.length > 0) {
+                imageListEl.innerHTML = '';
+                data.images.forEach(img => {
+                    addImageToList(img.name, img.timestamp);
+                });
+                // Auto-select the first (latest) image
+                if (data.images.length > 0 && !selectedImage) {
+                    selectImage(data.images[0].name);
+                }
+            }
+        });
+
+        socket.on('clear_all', () => {
+            document.getElementById('transcriptionArea').textContent = '';
+            document.getElementById('responseArea').textContent = '';
+        });
+
+        socket.on('recording_state', (data) => {
+            isRecording = data.is_recording;
+            updateButtonStates();
+            if (data.error) {
+                alert('Error: ' + data.error);
+            }
+        });
+
+        socket.on('freeze_state', (data) => {
+            isFrozen = data.is_frozen;
+            updateFreezeButton();
+            if (data.error) {
+                alert('Error: ' + data.error);
+            }
+        });
+
+        function addImageToList(name, timestamp) {
+            const imageListEl = document.getElementById('imageList');
+            if (imageListEl.innerHTML.includes('No images yet')) {
+                imageListEl.innerHTML = '';
+            }
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'image-item';
+            itemDiv.onclick = () => selectImage(name);
+            itemDiv.dataset.imageName = name;
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'image-item-name';
+            nameDiv.textContent = name;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'image-item-time';
+            const date = new Date(timestamp);
+            timeDiv.textContent = date.toLocaleTimeString();
+            
+            itemDiv.appendChild(nameDiv);
+            itemDiv.appendChild(timeDiv);
+            
+            // Insert at the top (prepend) to keep latest first
+            imageListEl.insertBefore(itemDiv, imageListEl.firstChild);
+        }
+
+        function selectImage(imageName) {
+            selectedImage = imageName;
+            updateImageListSelection();
+            displayImageResult(imageName);
+        }
+
+        function updateImageListSelection() {
+            document.querySelectorAll('.image-item').forEach(item => {
+                if (item.dataset.imageName === selectedImage) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        function displayImageResult(imageName) {
+            const resultPanel = document.getElementById('imageResultPanel');
+            const result = imageResults[imageName];
+            
+            if (result) {
+                resultPanel.innerHTML = `
+                    <div class="image-result-header">
+                        <div class="image-result-title">📸 ${result.image_name}</div>
+                        <div class="image-result-subtitle">AI Analysis Result</div>
+                    </div>
+                    <div class="image-result-content">${escapeHtml(result.text)}</div>
+                `;
+                resultPanel.scrollTop = 0;
+            } else {
+                resultPanel.innerHTML = '<div class="no-image-selected">Processing image... Please wait.</div>';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function startRecording() {
+            socket.emit('start_recording');
+        }
+
+        function stopRecording() {
+            socket.emit('stop_recording');
+        }
+
+        function toggleFreeze() {
+            isFrozen = !isFrozen;
+            socket.emit('toggle_freeze', { freeze: isFrozen });
+            updateFreezeButton();
+        }
+
+        function clearAll() {
+            socket.emit('clear_all');
+        }
+
+        function updateButtonStates() {
+            document.getElementById('startBtn').disabled = isRecording;
+            document.getElementById('stopBtn').disabled = !isRecording;
+        }
+
+        function updateFreezeButton() {
+            const freezeBtn = document.getElementById('freezeBtn');
+            if (isFrozen) {
+                freezeBtn.textContent = '🔥 Unfreeze AI';
+                freezeBtn.classList.add('frozen');
+            } else {
+                freezeBtn.textContent = '❄ Freeze AI';
+                freezeBtn.classList.remove('frozen');
+            }
+        }
+
+        updateButtonStates();
+    </script>
+</body>
+</html>

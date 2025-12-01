@@ -1,6 +1,7 @@
 import google.generativeai as genai
 import logging
 import threading
+from PIL import Image
 
 
 logger = logging.getLogger(__name__)
@@ -10,10 +11,12 @@ class GeminiHandler:
     def __init__(self, api_key):
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel("gemini-flash-lite-latest")
+        self.vision_model = genai.GenerativeModel("gemini-2.5-pro")
         self.is_frozen = False
         
         self.on_response = None
         self.on_clear_transcription = None
+        self.on_image_response = None
         
     def set_frozen(self, frozen):
         self.is_frozen = frozen
@@ -74,3 +77,63 @@ Do not give unnecessary explanations - be direct and to the point."""
         gemini_thread = threading.Thread(target=_process)
         gemini_thread.daemon = True
         gemini_thread.start()
+    
+    def process_image(self, image_path):
+        """Process an image containing MCQ or coding question"""
+        def _process_image():
+            if self.is_frozen:
+                logger.info("AI responses are frozen. Skipping image processing.")
+                return
+            
+            if not self.vision_model:
+                logger.error("Gemini vision model is not available. Skipping image processing.")
+                return
+            
+            logger.info(f"Processing image with Gemini: {image_path}")
+            
+            try:
+                # Load the image
+                image = Image.open(image_path)
+                
+                # Create a concise prompt for MCQ and coding questions
+                prompt = """Analyze this image. It contains either a Multiple Choice Question (MCQ) or a Coding Question.
+
+**CRITICAL INSTRUCTIONS - Follow exactly:**
+
+1. **If it's an MCQ:**
+   - Respond with ONLY the correct option letter (A, B, C, or D)
+   - Nothing else. No explanation. No question restatement.
+   - Example response: "C"
+
+2. **If it's a Coding Question:**
+   - Respond with ONLY the Python code solution
+   - No problem restatement
+   - No explanations or approach description
+   - No complexity analysis
+   - No markdown code blocks
+   - No comments in the code
+   - Just pure, executable Python code
+
+Your response:"""
+
+                # Generate response with image
+                response = self.vision_model.generate_content([prompt, image])
+                
+                logger.info("Image analysis complete")
+                
+                # Send response through callback
+                if self.on_image_response:
+                    self.on_image_response(response.text, image_path)
+                elif self.on_response:
+                    # Fallback to regular response handler
+                    header = f"📸 IMAGE ANALYSIS: {image_path.split('/')[-1]}\n"
+                    self.on_response(header + response.text)
+                
+            except Exception as e:
+                logger.error(f"Error processing image with Gemini: {e}")
+                if self.on_response:
+                    self.on_response(f"Error processing image: {str(e)}")
+        
+        image_thread = threading.Thread(target=_process_image)
+        image_thread.daemon = True
+        image_thread.start()

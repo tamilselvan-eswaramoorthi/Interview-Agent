@@ -2,3 +2,8 @@ sounddevice
 scipy
 assemblyai
 google-generativeai
+google-cloud-storage
+Pillow
+flask
+flask-socketio
+python-socketio

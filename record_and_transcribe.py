@@ -7,12 +7,14 @@ import threading
 from ui_components import TranscriptionUI
 from audio_handler import AudioStreamHandler
 from ai_handler import GeminiHandler
+from gcp_bucket_listener import GCPBucketListener
 from utils import list_audio_devices, verify_device
 
 
 DEVICE_ID = 11
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+GCP_BUCKET_NAME = os.getenv("GCP_BUCKET_NAME")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,16 +25,30 @@ class TranscriptionApp:
         self.root = root
         self.is_recording = False
         self.recording_thread = None
+        self.bucket_listener_thread = None
         
         self.ui = TranscriptionUI(root)
         self.audio_handler = AudioStreamHandler(ASSEMBLYAI_API_KEY, DEVICE_ID)
         self.ai_handler = GeminiHandler(GEMINI_API_KEY)
+        
+        # Initialize GCP bucket listener if configured
+        self.bucket_listener = None
+        if GCP_BUCKET_NAME:
+            try:
+                self.bucket_listener = GCPBucketListener(GCP_BUCKET_NAME)
+                self.bucket_listener.on_new_image = self._handle_new_image
+                self._start_bucket_monitoring()
+                logger.info(f"GCP bucket listener initialized for: {GCP_BUCKET_NAME}")
+            except Exception as e:
+                logger.error(f"Failed to initialize GCP bucket listener: {e}")
+                self.bucket_listener = None
         
         self.audio_handler.on_status_update = self.ui.update_status
         self.audio_handler.on_transcript_update = self._handle_transcript
         
         self.ai_handler.on_response = self.ui.add_response
         self.ai_handler.on_clear_transcription = self.ui.clear_transcription
+        self.ai_handler.on_image_response = self._handle_image_response
         
         self.ui.start_button.config(command=self.start_recording)
         self.ui.stop_button.config(command=self.stop_recording)
@@ -42,6 +58,33 @@ class TranscriptionApp:
     def _handle_transcript(self, transcript):
         self.ui.add_transcription(transcript)
         self.ai_handler.process_transcript(transcript)
+    
+    def _start_bucket_monitoring(self):
+        """Start monitoring GCP bucket in background thread"""
+        def monitor_bucket():
+            if self.bucket_listener:
+                self.bucket_listener.listen(interval=5)
+        
+        self.bucket_listener_thread = threading.Thread(target=monitor_bucket)
+        self.bucket_listener_thread.daemon = True
+        self.bucket_listener_thread.start()
+        logger.info("Bucket monitoring thread started")
+    
+    def _handle_new_image(self, local_path, file_info):
+        """Handle new image detected from GCP bucket"""
+        logger.info(f"Processing new image: {local_path}")
+        self.ui.update_status(f"📸 New image detected: {file_info['name']}", 'blue')
+        
+        # Process the image with Gemini
+        self.ai_handler.process_image(local_path)
+    
+    def _handle_image_response(self, response_text, image_path):
+        """Handle response from image analysis"""
+        image_name = os.path.basename(image_path)
+        header = f"\n{'='*60}\n📸 IMAGE ANALYSIS: {image_name}\n{'='*60}\n\n"
+        full_response = header + response_text
+        self.ui.add_response(full_response)
+        logger.info(f"Image analysis response added to UI for: {image_name}")
         
     def toggle_ai_freeze(self):
         is_frozen = not self.ai_handler.is_frozen
@@ -104,7 +147,8 @@ class TranscriptionApp:
         self.ui.update_status("Recording stopped", 'black')
 
 
-def main():
+def run_audio_mode():
+    """Run the application in audio interview mode"""
     list_audio_devices()
     
     if not verify_device(DEVICE_ID):
@@ -122,6 +166,12 @@ def main():
     
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
+
+
+def main():
+    """Legacy main function for backward compatibility"""
+    run_audio_mode()
+
 
 if __name__ == "__main__":
     main()

@@ -1,2 +1,5 @@
 .venv
 .env
+downloaded_images/
+gcp_key.json
+__pycache__/
